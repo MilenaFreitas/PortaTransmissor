@@ -1,3 +1,5 @@
+//FECHADURA SALA TECNICA 
+//MILENA FREITAS
 #include <Arduino.h>
 #include <Keypad.h>
 #include <U8x8lib.h>
@@ -233,8 +235,9 @@ void loop(){
     digitada+=key;   
   }
     estadoSenha(estado);
-  } else {
-    estado=0;
   }
+  //  else {
+  //   estado=0;
+  // }
   // payload();
 }
