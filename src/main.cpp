@@ -8,9 +8,9 @@
 #include <PubSubClient.h>
 #include <WiFi.h>
 #include <WebServer.h>
-String senha= "0000";
-const int fechadura=14; //verificar os pinos
-const int botaoAbre=27; //verificar pino
+String senha= "0000"; //senha de entrada
+const int fechadura=14; 
+const int botaoAbre=27; 
 const int buzzer=13;
 int estado=0;
 const byte linha = 4;
@@ -27,7 +27,7 @@ char keys [linha] [coluna]={
 Keypad keypad = Keypad(makeKeymap(keys), pinolinha, pinocoluna, linha, coluna);
 U8X8_SSD1306_128X64_NONAME_SW_I2C u8x8(15, 4, 16);
 
-#define WIFI_NOME "Metropole"
+#define WIFI_NOME "Metropole" //rede wifi específica
 #define WIFI_SENHA "908070Radio"
 #define BROKER_MQTT "10.71.0.2"
 #define DEVICE_TYPE "ESP32-TRM"
@@ -101,13 +101,13 @@ void visorInicio(){
 }
 void estadoSenha (int estado){
 // 0=espera 1=aceito 2=negado 
-  if (estado==0){
+  if (estado==0){ //standy by da porta, esperando ação
     digitalWrite(fechadura, HIGH); //trancada
     Serial.print("digite a senha: ");
     u8x8.setFont(u8x8_font_8x13B_1x2_f);
     u8x8.setCursor(1,4);
     u8x8.print("Digite a Senha ");
-  } else if (estado==1){
+  } else if (estado==1){ //abre
     u8x8.clear();
     u8x8.setFont(u8x8_font_8x13B_1x2_f);
     u8x8.setCursor(3,2);
@@ -118,7 +118,7 @@ void estadoSenha (int estado){
     digitalWrite(buzzer, HIGH);
     digitalWrite(fechadura, HIGH);
     
-  } else if (estado==2){
+  } else if (estado==2){ //não abre
     digitalWrite(fechadura, HIGH); //TRANCADA
     Serial.print("falha na tentativa");
     digitalWrite(buzzer, LOW);
@@ -134,10 +134,10 @@ void estadoSenha (int estado){
     u8x8.print("Senha incorreta");
   }
 }
-bool verificaSenha (String sa, String sd){
+bool verificaSenha (String sa, String sd){ //funçao chamada para comparar as senhas 
   bool resultado=false;
-  if(sa.compareTo(sd)==0){
-    resultado=true;
+  if(sa.compareTo(sd)==0){//se a comparação for 0 é porque são iguais
+    resultado=true; //se senha correta função verificaSenha fica verdadeira
   } else {
     resultado=false;
   }
@@ -197,28 +197,27 @@ void setup(){
 void loop(){
   // server.handleClient();
   // reconectaMQTT();
-  if(digitalRead(botaoAbre) == HIGH){
+  if(digitalRead(botaoAbre) == HIGH){ //se apertar o botao abre a porta 
     digitalWrite(fechadura, LOW);
     delay(2000);
     digitalWrite(fechadura, HIGH);
-    estado=0;
+    estado=0; //retorna para standy by
   }
   char key = keypad.getKey(); //le as teclas
-  if (key !=NO_KEY){
+  if (key !=NO_KEY){ //se digitar...
     digitalWrite (buzzer, LOW);
     delay(50);
     digitalWrite(buzzer, HIGH); 
-    if (key=='A'){
-    //campainha 
+    if (key=='A'){ //campainha
     digitalWrite (buzzer, LOW);
     delay(1500);
     digitalWrite(buzzer, HIGH); 
     digitada="";
     Serial.println("campainha");
-  } else if (key=='C'){
+  } else if (key=='C'){ //limpa a tela
     //limpa senha
     digitada="";
-  } else if(key=='#'){
+  } else if(key=='#'){ //depois do enter vai verificar a senha 
       if(verificaSenha(senha, digitada)){
         estado=1; //senha certa
         estadoSenha(estado);
@@ -230,9 +229,9 @@ void loop(){
         delay(2000);
         estado=0;
       }
-      digitada="";
+      digitada=""; //limpa o que foi digitado
   } else {
-    digitada+=key;   
+    digitada+=key;  //concatenar as info que são digitadas
   }
     estadoSenha(estado);
   }
