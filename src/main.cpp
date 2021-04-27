@@ -1,5 +1,5 @@
-//FECHADURA SALA TECNICA 
-//MILENA FREITAS
+//FECHADURA SALA TECNICA COM SENHA
+//MILENA FREITAS 2021
 #include <Arduino.h>
 #include <Keypad.h>
 #include <U8x8lib.h>
@@ -8,7 +8,13 @@
 #include <PubSubClient.h>
 #include <WiFi.h>
 #include <WebServer.h>
-String senha= "0000"; //senha de entrada
+#include <EEPROM.h>
+
+const int tamanho_array=4;
+const int STARTING_EEPROM_ADDRESS = 10; //primeiro endereço 
+int senhas[]= {6950, 7845, 6569, 1984};
+String usuario[] ={"MAURICIO", "MILENA", "MEIRA", "LEONARDO"};
+String novasSenhas[tamanho_array];
 const int fechadura=14; 
 const int botaoAbre=27; 
 const int buzzer=13;
@@ -27,6 +33,7 @@ char keys [linha] [coluna]={
 Keypad keypad = Keypad(makeKeymap(keys), pinolinha, pinocoluna, linha, coluna);
 U8X8_SSD1306_128X64_NONAME_SW_I2C u8x8(15, 4, 16);
 
+#define EEPROM_SIZE 1024
 #define WIFI_NOME "Metropole" //rede wifi específica
 #define WIFI_SENHA "908070Radio"
 #define BROKER_MQTT "10.71.0.2"
@@ -45,6 +52,7 @@ NTPClient ntp(udp, "a.st1.ntp.br", -3 * 3600, 60000); //Hr do Br
 struct tm data; //armazena data 
 char data_formatada[64];
 char timeStamp; 
+bool acerteiSenha=false;
 /////////////////////////////////////////////////////////////////
 void callback(char* topic, byte* payload, unsigned int length){
   //retorna infoMQTT
@@ -88,6 +96,21 @@ void hora(){
     ntp.forceUpdate();
   }
 }
+void escreveEEPROM(int endereco, int senhas[], unsigned int length) {
+  int adressIndex=endereco;
+  for (int i=0; i<5; i++){
+    EEPROM.write(adressIndex, senhas[i]>>8);
+    EEPROM.write(adressIndex+1, senhas[i] & 0xFF);// escreve o byte menos significativo
+    adressIndex+=2;
+  }
+}
+void leEEPROM (int endereco, String senhas[], unsigned int length){
+  int adressIndex=endereco;
+  for (int i=0; i<5; i++){
+    senhas[i] = (EEPROM.read(adressIndex)<<8) + EEPROM.read(adressIndex+1);
+    adressIndex+=2;
+  }
+}
 void pin(){
   pinMode(fechadura, OUTPUT);
   pinMode(buzzer, OUTPUT);
@@ -102,11 +125,8 @@ void visorInicio(){
 void estadoSenha (int estado){
 // 0=espera 1=aceito 2=negado 
   if (estado==0){ //standy by da porta, esperando ação
+    digitalWrite(buzzer, HIGH);
     digitalWrite(fechadura, HIGH); //trancada
-    Serial.print("digite a senha: ");
-    u8x8.setFont(u8x8_font_8x13B_1x2_f);
-    u8x8.setCursor(1,4);
-    u8x8.print("Digite a Senha ");
   } else if (estado==1){ //abre
     u8x8.clear();
     u8x8.setFont(u8x8_font_8x13B_1x2_f);
@@ -117,8 +137,11 @@ void estadoSenha (int estado){
     delay(2000);
     digitalWrite(buzzer, HIGH);
     digitalWrite(fechadura, HIGH);
-    
   } else if (estado==2){ //não abre
+    u8x8.clear(); 
+    u8x8.setFont(u8x8_font_8x13B_1x2_f);
+    u8x8.setCursor(0,4);
+    u8x8.print("Senha incorreta");
     digitalWrite(fechadura, HIGH); //TRANCADA
     Serial.print("falha na tentativa");
     digitalWrite(buzzer, LOW);
@@ -127,11 +150,7 @@ void estadoSenha (int estado){
     delay(500);
     digitalWrite(buzzer, LOW);
     delay(500);
-    digitalWrite(buzzer, HIGH);  
-    u8x8.setFont(u8x8_font_8x13B_1x2_f);
-    u8x8.setCursor(0,4);
-    u8x8.clear();
-    u8x8.print("Senha incorreta");
+    digitalWrite(buzzer, HIGH); 
   }
 }
 bool verificaSenha (String sa, String sd){ //funçao chamada para comparar as senhas 
@@ -170,7 +189,9 @@ void payload (){
 }
 void setup(){
   Serial.begin(115200);
-  visorInicio();
+  EEPROM.begin(EEPROM_SIZE);
+  escreveEEPROM(STARTING_EEPROM_ADDRESS, senhas, tamanho_array);
+  leEEPROM(STARTING_EEPROM_ADDRESS, novasSenhas, tamanho_array);
   // WiFi.begin(WIFI_NOME, WIFI_SENHA);
   // while(WiFi.status()!= WL_CONNECTED){
   //   Serial.println("conectando...");
@@ -189,14 +210,19 @@ void setup(){
   //   settimeofday(&tv, NULL);
   // }
   // client.setServer (BROKER_MQTT, 1883);//define mqtt
-  // client.setCallback(callback); 
+  // client.setCallback(callb ack); 
   pin();
   u8x8.begin();
-  u8x8.clear();
+  u8x8.setFont(u8x8_font_8x13B_1x2_f);
+  u8x8.setCursor(1,4);
+  u8x8.print("digite a senha: ");
+  Serial.print("digite a senha");
 }
 void loop(){
   // server.handleClient();
   // reconectaMQTT();
+  estadoSenha(estado);
+  estado=0;
   if(digitalRead(botaoAbre) == HIGH){ //se apertar o botao abre a porta 
     digitalWrite(fechadura, LOW);
     delay(2000);
@@ -211,32 +237,38 @@ void loop(){
     if (key=='A'){ //campainha
     digitalWrite (buzzer, LOW);
     delay(1500);
-    digitalWrite(buzzer, HIGH); 
+    digitalWrite(buzzer, HIGH);
     digitada="";
-    Serial.println("campainha");
-  } else if (key=='C'){ //limpa a tela
+  } else if (key=='C'){
     //limpa senha
     digitada="";
   } else if(key=='#'){ //depois do enter vai verificar a senha 
-      if(verificaSenha(senha, digitada)){
+    for (int i = 0; i < 5; i++) { //VERIFICAR SE ESTA SAINDO DESSE LAÇO
+      if(verificaSenha(novasSenhas[i], digitada)){
         estado=1; //senha certa
+        acerteiSenha = true;
+        String payload = "{\"Senha correta, usuario\":";
+        payload += usuario[i];
+        payload += "}";
         estadoSenha(estado);
-        delay(2000);
         estado=0;
-      } else {
-        estado=2;
-        estadoSenha(estado);
-        delay(2000);
-        estado=0;
+        delay(2000); 
+        break;
       }
-      digitada=""; //limpa o que foi digitado
+    } 
+    if (acerteiSenha==false) {
+      estado=2;
+      estadoSenha(estado);
+      delay(2000);
+      estado=0;
+    }
+    digitada=""; //limpa o que foi digitado
+    acerteiSenha=false;
   } else {
     digitada+=key;  //concatenar as info que são digitadas
   }
     estadoSenha(estado);
   }
-  //  else {
-  //   estado=0;
-  // }
   // payload();
 }
+
