@@ -118,15 +118,19 @@ void pin(){
 }
 void visorInicio(){
   u8x8.clear();
-  u8x8.setFont(u8x8_font_inb21_2x4_f);
+  u8x8.setFont(u8x8_font_8x13B_1x2_f);
   u8x8.setCursor(1,4);
-  u8x8.print("Digite a Senha ");
+  u8x8.print("digite a senha: ");
 }
 void estadoSenha (int estado){
 // 0=espera 1=aceito 2=negado 
   if (estado==0){ //standy by da porta, esperando ação
     digitalWrite(buzzer, HIGH);
     digitalWrite(fechadura, HIGH); //trancada
+    u8x8.clear();
+    u8x8.setFont(u8x8_font_8x13B_1x2_f);
+    u8x8.setCursor(1,4);
+    u8x8.print("digite a senha: ");
   } else if (estado==1){ //abre
     u8x8.clear();
     u8x8.setFont(u8x8_font_8x13B_1x2_f);
@@ -217,20 +221,22 @@ void setup(){
   u8x8.setCursor(1,4);
   u8x8.print("digite a senha: ");
   Serial.print("digite a senha");
+  estado=0;//inicializa com porta travada
+  estadoSenha(estado);
 }
 void loop(){
   // server.handleClient();
   // reconectaMQTT();
-  estadoSenha(estado);
-  estado=0;
-  if(digitalRead(botaoAbre) == HIGH){ //se apertar o botao abre a porta 
+
+  if(digitalRead(botaoAbre)==HIGH){ //se apertar o botao abre a porta 
     digitalWrite(fechadura, LOW);
     delay(2000);
     digitalWrite(fechadura, HIGH);
     estado=0; //retorna para standy by
+    estadoSenha(estado);
   }
   char key = keypad.getKey(); //le as teclas
-  if (key !=NO_KEY){ //se digitar...
+  if (key!=NO_KEY){ //se digitar...
     digitalWrite (buzzer, LOW);
     delay(50);
     digitalWrite(buzzer, HIGH); 
@@ -271,4 +277,3 @@ void loop(){
   }
   // payload();
 }
-
