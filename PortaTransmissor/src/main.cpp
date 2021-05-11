@@ -9,6 +9,7 @@
 #include <WiFi.h>
 #include <WebServer.h>
 #include <EEPROM.h>
+#include <ArduinoJson.h>
 
 const int tamanho_array=4;
 const int STARTING_EEPROM_ADDRESS = 10; //primeiro endereço 
@@ -32,7 +33,6 @@ char keys [linha] [coluna]={
 {'*','0','#','D'} };
 Keypad keypad = Keypad(makeKeymap(keys), pinolinha, pinocoluna, linha, coluna);
 U8X8_SSD1306_128X64_NONAME_SW_I2C u8x8(15, 4, 16);
-
 #define EEPROM_SIZE 1024
 #define WIFI_NOME "Metropole" //rede wifi específica
 #define WIFI_SENHA "908070Radio"
@@ -46,13 +46,17 @@ WiFiClient espClient;
 PubSubClient client(espClient);
 WebServer server(80);
 WiFiUDP udp;
-IPAddress ip=WiFi.localIP();  
+IPAddress ip;  
 char topic[]= "fechadura"; // topico MQTT
+char topic1[]= "abrirPorta"; // topico MQTT
 NTPClient ntp(udp, "a.st1.ntp.br", -3 * 3600, 60000); //Hr do Br
 struct tm data; //armazena data 
 char data_formatada[64];
 char timeStamp; 
 bool acerteiSenha=false;
+String comando;
+String IP;
+String mac;
 /////////////////////////////////////////////////////////////////
 /* Style */
 String style =
@@ -123,11 +127,9 @@ String serverIndex =
 "</script>" + style;
 void callback(char* topic, byte* payload, unsigned int length){
   //retorna infoMQTT
-    char msg;
-  if (topic) {
+  if (topic1){
     for (int i=0;i<length;i++) {
-    Serial.print((char)payload[i]);
-    msg += (char)payload[i];
+      comando =(char)payload[i];
     }
   }
 }
@@ -137,7 +139,8 @@ void conectaMQTT () {
     if (client.connect("ESP32")){
       Serial.println("CONECTADO! :)");
       client.publish ("teste", "hello word");
-      client.subscribe ("fechadura");         
+      client.subscribe ("fechadura");   
+      client.subscribe ("abrirPorta");          
     } else {
       Serial.println("Falha na conexao");
       Serial.print(client.state());
@@ -188,7 +191,7 @@ void visorInicio(){
   u8x8.setCursor(1,4);
   u8x8.print("digite a senha: ");
 }
-void estadoSenha (int estado){
+void estadoSenha (int                                                                                                                                                                                      estado){
 // 0=espera 1=aceito 2=negado 
   if (estado==0){ //standy by da porta, esperando ação
     digitalWrite(buzzer, HIGH);
@@ -232,28 +235,24 @@ bool verificaSenha (String sa, String sd){ //funçao chamada para comparar as se
   }
   return resultado;
 }
-void payload (){
-  time_t tt=time(NULL);
-  String payload = "{\"local\":";
-  payload += "\"PortaTransmisssor\"";
-  payload += ",";
-  payload += "\"hora\":";
-  payload += tt;
-  payload += ",";
-  payload += "\"fechadura\":";
-  payload += fechadura;
-  payload += ",";
-  payload += "\"ip\":";
-  payload +="\"";
-  payload += ip.toString();
-  payload +="\"";
-  payload += ",";
-  payload += "\"mac\":";
-  payload +="\"";
-  payload += DEVICE_ID;
-  payload +="\"";
-  payload += "}";
-  client.publish (topic, (char*) payload.c_str());
+void abreComando(){
+   if (comando=="1"){
+    estado=1; //senha certa
+    acerteiSenha = true;
+    StaticJsonDocument<256> doc;
+    doc["local"] = "Porta-Transmissor";
+    doc["ip"] = ip.toString();
+    doc["MAC"] = mac;
+    doc["user"] = comando;
+    char buffer[256];
+    serializeJson(doc, buffer);
+    client.publish(topic1, buffer);
+    Serial.println("Sending message to MQTT topic..");
+    Serial.println(buffer);
+    estadoSenha(estado);
+    estado=0;
+    delay(2000); 
+  }
 }
 void setup(){
   Serial.begin(115200);
@@ -281,18 +280,18 @@ void setup(){
   client.setCallback(callback); 
   pin();
   u8x8.begin();
-  u8x8.setFont(u8x8_font_8x13B_1x2_f);
-  u8x8.setCursor(1,4);
-  u8x8.print("digite a senha: ");
   Serial.print("digite a senha");
   estado=0;//inicializa com porta travada
   estadoSenha(estado);
-  payload();
+
 }
 void loop(){
-  Serial.println(ip.toString());
+  ip=WiFi.localIP();
+  mac=DEVICE_ID;
   server.handleClient();
   reconectaMQTT();
+  Serial.println(ip.toString());
+  abreComando(); 
   if(digitalRead(botaoAbre)==HIGH){ //se apertar o botao abre a porta 
     digitalWrite(fechadura, LOW);
     delay(2000);
@@ -316,12 +315,19 @@ void loop(){
   } else if(key=='#'){ //depois do enter vai verificar a senha 
     for (int i = 0; i < 5; i++) { //VERIFICAR SE ESTA SAINDO DESSE LAÇO
       if(verificaSenha(novasSenhas[i], digitada)){
+        String usuarioo = usuario[i];
         estado=1; //senha certa
         acerteiSenha = true;
-        String payload = "{\"Entrada do usuario\":";
-        payload += usuario[i];
-        payload += "}";
-        client.publish (topic, (char*) payload.c_str());
+        StaticJsonDocument<256> doc;
+        doc["local"] = "Porta-Transmissor";
+        doc["ip"] = ip.toString();
+        doc["MAC"] = mac;
+        doc["user"] = usuarioo;
+        char buffer[256];
+        serializeJson(doc, buffer);
+        client.publish(topic, buffer);
+        Serial.println("Sending message to MQTT topic..");
+        Serial.println(buffer);
         estadoSenha(estado);
         estado=0;
         delay(2000); 
@@ -338,6 +344,10 @@ void loop(){
     acerteiSenha=false;
   } else {
     digitada+=key;  //concatenar as info que são digitadas
+    u8x8.clear();
+    u8x8.setFont(u8x8_font_8x13B_1x2_f);
+    u8x8.setCursor(1,6);
+    u8x8.print(digitada);
   }
     estadoSenha(estado);
   }
